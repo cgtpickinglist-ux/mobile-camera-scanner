@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mobile QR & Barcode Scanner</title>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:16px;background:#f3f5f7;color:#17202a;font-family:Arial,sans-serif}
+  .panel{max-width:620px;margin:0 auto;background:#fff;border-radius:16px;padding:18px;box-shadow:0 4px 18px #0001}
+  h1{font-size:22px;color:#174a7e;margin:0 0 8px}
+  p{font-size:14px;line-height:1.45;color:#526173}
+  #reader{width:100%;min-height:260px;margin:16px 0;border-radius:12px;overflow:hidden;background:#111}
+  #status{padding:12px;border-radius:8px;background:#e4efff;color:#174a7e;white-space:pre-wrap;overflow-wrap:anywhere}
+  button{width:100%;padding:15px;border:0;border-radius:10px;font-size:16px;font-weight:bold;background:#b52b27;color:white;margin-top:12px}
+  button:disabled{background:#999}
+  .value{font-weight:bold;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<div class="panel">
+  <h1 id="heading">Mobile Scanner</h1>
+  <p>Allow camera access and hold the QR code or 2D barcode inside the frame. The scanner reads continuously until you stop it.</p>
+  <div id="reader"></div>
+  <div id="status">Starting camera…</div>
+  <button type="button" id="stopButton" onclick="stopScanner()">STOP SCANNER</button>
+</div>
+<script>
+  const params=new URLSearchParams(location.search);
+  const requestedMode=params.get('mode');
+  const mode=['dispatcher','search'].includes(requestedMode)?requestedMode:'invoice';
+  document.getElementById('heading').textContent=mode==='dispatcher'?'Scan Dispatcher QR Code':mode==='search'?'Scan Batch ID / Dispatcher':'Scan Invoice QR / 2D Barcode';
+  let scanner=null,stopped=false,lastValue='',lastTime=0;
+  const supported=window.Html5QrcodeSupportedFormats||{};
+  const wanted=['QR_CODE','DATA_MATRIX','PDF_417','AZTEC','MAXICODE','MICRO_QR_CODE','CODE_128','CODE_39','EAN_13','EAN_8','UPC_A','UPC_E','ITF'];
+  const formats=wanted.map(name=>supported[name]).filter(value=>typeof value==='number');
+  function setStatus(text){document.getElementById('status').textContent=text;}
+  async function startScanner(){
+    try{
+      if(!window.Html5Qrcode)throw new Error('Scanner library did not load. Check your internet connection and reload.');
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Camera access is unavailable. Open this page directly in a modern mobile browser over HTTPS.');
+      scanner=new Html5Qrcode('reader',formats.length?{formatsToSupport:formats,verbose:false}:{verbose:false});
+      await scanner.start({facingMode:'environment'},{fps:12,qrbox:(width,height)=>({width:Math.floor(Math.min(width*0.88,420)),height:Math.floor(Math.min(height*0.45,230))}),aspectRatio:1.333},
+        decoded=>{
+          const value=String(decoded||'').trim();if(!value||stopped)return;
+          const now=Date.now();if(value===lastValue&&now-lastTime<1800)return;
+          lastValue=value;lastTime=now;
+          setStatus('Scanned: '+value+'\nSending to Dispatch Batch Scanner…');
+          if(window.opener&&!window.opener.closed){
+            window.opener.postMessage({type:'dispatch-camera-scan',mode:mode,value:value},'*');
+            if(mode==='dispatcher'||mode==='search'){
+              setStatus(mode==='dispatcher'?'Dispatcher QR received. Returning to Dispatch Batch Scanner…':'Search code received. Returning to Dispatch Batch Scanner…');
+              setTimeout(()=>stopScanner(true),250);
+            }else{
+              setTimeout(()=>{if(!stopped)setStatus('Invoice received: '+value+'\nKeep scanning or tap STOP SCANNER.');},450);
+            }
+          }else{
+            setStatus('Dispatch Batch Scanner window was not found. Open this scanner using the scanner icon inside the app.');
+          }
+        },
+        ()=>{}
+      );
+      setStatus('Camera ready. Point at the code. Supported: QR, Data Matrix, PDF417, Aztec and common barcode formats.');
+    }catch(error){
+      setStatus('Camera could not start: '+(error&&error.message?error.message:String(error))+'\n\nCheck browser camera permission and confirm this page is hosted on HTTPS.');
+      document.getElementById('stopButton').textContent='CLOSE SCANNER';
+    }
+  }
+  async function stopScanner(fromApp){
+    stopped=true;
+    try{if(scanner){if(scanner.isScanning)await scanner.stop();await scanner.clear();}}catch(ignore){}
+    if(!fromApp&&window.opener&&!window.opener.closed){
+      window.opener.postMessage({type:'dispatch-camera-stopped',mode:mode},'*');
+    }
+    document.getElementById('stopButton').disabled=true;
+    setStatus('Scanner stopped. You can close this window.');
+  }
+  window.addEventListener('message',event=>{
+    if(event.source!==window.opener||!event.data||event.data.type!=='dispatch-camera-stop')return;
+    stopScanner(true);
+  });
+  window.addEventListener('beforeunload',()=>{try{if(scanner&&scanner.isScanning)scanner.stop();}catch(ignore){}});
+  startScanner();
+</script>
+</body>
+</html>
