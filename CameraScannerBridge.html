@@ -28,8 +28,9 @@
 </div>
 <script>
   const params=new URLSearchParams(location.search);
-  const mode=params.get('mode')==='dispatcher'?'dispatcher':'invoice';
-  document.getElementById('heading').textContent=mode==='dispatcher'?'Scan Dispatcher QR Code':'Scan Invoice QR / 2D Barcode';
+  const requestedMode=params.get('mode');
+  const mode=['dispatcher','search'].includes(requestedMode)?requestedMode:'invoice';
+  document.getElementById('heading').textContent=mode==='dispatcher'?'Scan Dispatcher QR Code':mode==='search'?'Scan Batch ID / Dispatcher':'Scan Invoice QR / 2D Barcode';
   let scanner=null,stopped=false,lastValue='',lastTime=0;
   const supported=window.Html5QrcodeSupportedFormats||{};
   const wanted=['QR_CODE','DATA_MATRIX','PDF_417','AZTEC','MAXICODE','MICRO_QR_CODE','CODE_128','CODE_39','EAN_13','EAN_8','UPC_A','UPC_E','ITF'];
@@ -48,8 +49,8 @@
           setStatus('Scanned: '+value+'\nSending to Dispatch Batch Scanner…');
           if(window.opener&&!window.opener.closed){
             window.opener.postMessage({type:'dispatch-camera-scan',mode:mode,value:value},'*');
-            if(mode==='dispatcher'){
-              setStatus('Dispatcher QR received. Returning to Dispatch Batch Scanner…');
+            if(mode==='dispatcher'||mode==='search'){
+              setStatus(mode==='dispatcher'?'Dispatcher QR received. Returning to Dispatch Batch Scanner…':'Search code received. Returning to Dispatch Batch Scanner…');
               setTimeout(()=>stopScanner(true),250);
             }else{
               setTimeout(()=>{if(!stopped)setStatus('Invoice received: '+value+'\nKeep scanning or tap STOP SCANNER.');},450);
