@@ -50,8 +50,10 @@
           if(window.opener&&!window.opener.closed){
             window.opener.postMessage({type:'dispatch-camera-scan',mode:mode,value:value},'*');
             if(mode==='dispatcher'||mode==='search'){
-              setStatus(mode==='dispatcher'?'Dispatcher QR received. Returning to Dispatch Batch Scanner…':'Search code received. Returning to Dispatch Batch Scanner…');
-              setTimeout(()=>stopScanner(true),250);
+              // The main app closes this window only after it accepts the scanned value.
+              // If a dispatcher QR does not match an employee, keep scanning so the user can retry.
+              setStatus(mode==='dispatcher'?'Dispatcher code read: '+value+'\nChecking employee name…':'Search code received. Returning to Dispatch Batch Scanner…');
+              if(mode==='search')setTimeout(()=>{if(!stopped)setStatus('Search code sent: '+value+'\nIf the search field updated, you can close this window.');},450);
             }else{
               setTimeout(()=>{if(!stopped)setStatus('Invoice received: '+value+'\nKeep scanning or tap STOP SCANNER.');},450);
             }
