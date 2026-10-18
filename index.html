@@ -68,13 +68,23 @@
     }
   }
   async function stopScanner(fromApp){
+    if(stopped)return;
     stopped=true;
     try{if(scanner){if(scanner.isScanning)await scanner.stop();await scanner.clear();}}catch(ignore){}
     if(!fromApp&&window.opener&&!window.opener.closed){
-      window.opener.postMessage({type:'dispatch-camera-stopped',mode:mode},'*');
+      try{window.opener.postMessage({type:'dispatch-camera-stopped',mode:mode},'*');}catch(ignore){}
     }
     document.getElementById('stopButton').disabled=true;
-    setStatus('Scanner stopped. You can close this window.');
+    setStatus('Scanner stopped. Returning to Dispatch Batch Scanner…');
+    // This page was opened by the main app, so try closing it; fall back to Back for mobile browsers.
+    setTimeout(function(){
+      try{window.close();}catch(ignore){}
+      setTimeout(function(){
+        if(!window.closed){
+          try{history.back();}catch(ignore){}
+        }
+      },250);
+    },250);
   }
   window.addEventListener('message',event=>{
     if(event.source!==window.opener||!event.data||event.data.type!=='dispatch-camera-stop')return;
